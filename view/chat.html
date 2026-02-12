@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat - Karim's chatapp</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #f5f5f5; }
+    .chat-header { background: #0d6efd; color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+    .chat-header h5 { margin: 0; }
+    .chat-main { flex: 1; display: flex; overflow: hidden; }
+    .sidebar { width: 220px; background: #fff; border-right: 1px solid #dee2e6; padding: 16px; overflow-y: auto; }
+    .messages-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; }
+    #messages { flex: 1; overflow-y: auto; padding: 16px; }
+    .msg { margin-bottom: 12px; }
+    .msg .sender { font-weight: 600; color: #333; font-size: 0.9rem; }
+    .msg .time { color: #6c757d; font-size: 0.75rem; margin-left: 6px; }
+    .msg .text { margin-top: 2px; }
+    .system-msg { color: #6c757d; font-style: italic; text-align: center; margin: 8px 0; }
+    #typingIndicator { min-height: 24px; padding: 4px 16px; color: #6c757d; font-style: italic; font-size: 0.9rem; }
+    .input-row { padding: 12px 16px; background: #fff; border-top: 1px solid #dee2e6; display: flex; gap: 8px; }
+    .input-row input { flex: 1; }
+  </style>
+</head>
+<body>
+  <div class="chat-header">
+    <h5>Karim's chatapp</h5>
+    <a href="index.html" class="btn btn-light btn-sm" id="leaveBtn">Leave Room</a>
+  </div>
+  <div class="chat-main">
+    <div class="sidebar">
+      <p class="mb-1"><strong>Room name:</strong></p>
+      <p class="text-primary" id="roomName">-</p>
+      <p class="mb-1 mt-2"><strong>Members:</strong></p>
+      <ul class="list-unstyled mb-0" id="membersList"></ul>
+    </div>
+    <div class="messages-wrap">
+      <div id="messages"></div>
+      <div id="typingIndicator"></div>
+      <div class="input-row">
+        <input type="text" class="form-control" id="messageInput" placeholder="Type your message here..." autocomplete="off">
+        <button type="button" class="btn btn-success" id="sendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var user = null;
+    try {
+      user = JSON.parse(localStorage.getItem('chat_user'));
+    } catch (e) {}
+    if (!user || !user.username) {
+      window.location.href = 'login.html';
+    }
+
+    var params = new URLSearchParams(window.location.search);
+    var room = params.get('room');
+    if (!room) {
+      window.location.href = 'index.html';
+    }
+
+    var socket = io();
+    var typingTimeout;
+
+    $('#roomName').text(room);
+
+    function appendMessage(m) {
+      var html = '<div class="msg"><span class="sender">' + escapeHtml(m.from_user) + '</span><span class="time">' + escapeHtml(m.date_sent) + '</span><div class="text">' + escapeHtml(m.message) + '</div></div>';
+      $('#messages').append(html);
+      $('#messages').scrollTop($('#messages')[0].scrollHeight);
+    }
+
+    function appendSystem(text) {
+      $('#messages').append('<div class="system-msg">' + escapeHtml(text) + '</div>');
+      $('#messages').scrollTop($('#messages')[0].scrollHeight);
+    }
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      var div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function setMembers(members) {
+      $('#membersList').empty();
+      (members || []).forEach(function (m) {
+        $('#membersList').append($('<li></li>').text(m));
+      });
+    }
+
+    socket.on('connect', function () {
+      socket.emit('join', { username: user.username, room: room });
+    });
+
+    socket.on('room_joined', function (data) {
+      setMembers(data.members);
+    });
+
+    socket.on('message_history', function (list) {
+      list.forEach(function (m) {
+        appendMessage(m);
+      });
+    });
+
+    socket.on('new_message', function (m) {
+      appendMessage(m);
+    });
+
+    socket.on('user_joined', function (data) {
+      setMembers(data.members);
+      appendSystem(data.username + ' has joined the chat');
+    });
+
+    socket.on('user_left', function (data) {
+      setMembers(data.members);
+      appendSystem(data.username + ' has left the chat');
+    });
+
+    socket.on('user_typing', function (data) {
+      $('#typingIndicator').text(data.username + ' is typing...');
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(function () {
+        $('#typingIndicator').text('');
+      }, 2000);
+    });
+
+    socket.on('user_stop_typing', function (data) {
+      $('#typingIndicator').text('');
+    });
+
+    $('#messageInput').on('input', function () {
+      socket.emit('typing');
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(function () {
+        socket.emit('stop_typing');
+      }, 500);
+    });
+
+    function sendMessage() {
+      var text = $('#messageInput').val().trim();
+      if (!text) return;
+      socket.emit('send_message', text);
+      $('#messageInput').val('');
+      socket.emit('stop_typing');
+    }
+
+    $('#sendBtn').on('click', sendMessage);
+    $('#messageInput').on('keypress', function (e) {
+      if (e.which === 13) sendMessage();
+    });
+
+    $('#leaveBtn').on('click', function (e) {
+      e.preventDefault();
+      socket.emit('leave_room');
+      window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

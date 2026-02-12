@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Room - Karim's chatapp</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f0f2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { box-shadow: 0 4px 12px rgba(0,0,0,0.1); border: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-md-5">
+        <div class="card">
+          <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="mb-0">Karim's chatapp</h5>
+            <a href="#" id="logoutBtn" class="text-white text-decoration-none small">Logout</a>
+          </div>
+          <div class="card-body p-4">
+            <div id="alert" class="alert d-none" role="alert"></div>
+            <form id="joinForm">
+              <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" readonly>
+              </div>
+              <div class="mb-3">
+                <label for="room" class="form-label">Room</label>
+                <select class="form-select" id="room" required>
+                  <option value="">Select a room</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-success w-100">Join Chat Room</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script>
+    var user = null;
+    try {
+      user = JSON.parse(localStorage.getItem('chat_user'));
+    } catch (e) {}
+    if (!user || !user.username) {
+      window.location.href = 'login.html';
+    }
+    $('#username').val(user.username);
+
+    fetch('/api/rooms')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        data.rooms.forEach(function (r) {
+          $('#room').append($('<option></option>').attr('value', r).text(r));
+        });
+      });
+
+    $('#logoutBtn').on('click', function (e) {
+      e.preventDefault();
+      localStorage.removeItem('chat_user');
+      window.location.href = 'login.html';
+    });
+
+    $('#joinForm').on('submit', function (e) {
+      e.preventDefault();
+      var room = $('#room').val();
+      if (!room) return;
+      window.location.href = 'chat.html?room=' + encodeURIComponent(room);
+    });
+  </script>
+</body>
+</html>
